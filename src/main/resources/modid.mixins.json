@@ -1,0 +1,19 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.github.Vaapukkax.fca.mixin",
+  "compatibilityLevel": "JAVA_16",
+  "mixins": [
+  ],
+  "client": [
+    "BladeJumpMixin",
+    "BlockBreakMixin",
+    "BlockPlaceMixin",
+    "FlagHandlerMixin",
+    "FlagMixin",
+    "HUDMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
