@@ -1,5 +1,6 @@
 package com.github.Vaapukkax.fca;
 
+import java.awt.Color;
 import java.math.RoundingMode;
 import java.text.DecimalFormat;
 import java.util.ArrayList;
@@ -20,10 +21,14 @@ import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents.StartTick;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
-import net.minecraft.block.Blocks;
+import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.font.TextRenderer;
+import net.minecraft.client.gui.screen.ChatScreen;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
+import net.minecraft.client.util.Window;
+import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.entity.player.PlayerInventory;
 import net.minecraft.item.Item;
@@ -37,7 +42,7 @@ import net.minecraft.text.LiteralText;
 import net.minecraft.text.MutableText;
 import net.minecraft.text.Text;
 import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
+import net.minecraft.world.World;
 
 public class FCA implements ModInitializer {
 	
@@ -56,37 +61,44 @@ public class FCA implements ModInitializer {
 	public void onInitialize() {
 		fca = this;
 		KeyBindingHelper.registerKeyBinding(shard);
-	
-		// Something illegal
-		ClientTickEvents.START_CLIENT_TICK.register(new StartTick() {
+		
+		//Anti MatterShatter
+		HudRenderCallback.EVENT.register(new HudRenderCallback() {
 
-			private boolean b;
-			ArrayList<BlockPos> bps = new ArrayList<>();
+			private World lastWorld;
+			private ItemStack lastItem;
+			private int lastSlot;
 			
-			@Override
-			public void onStartTick(MinecraftClient client) {
-				if (actionbar == null) return;
-				String om = actionbar.getString();
-				if (isFlagClash() && om.contains("Seconds")) {
-					if (!b) {
-						bps.clear();
-					}
-					b = true;
-					for (int x = -5; x < 5; x++) {
-						for (int y = -5; y < 5; y++) {
-							for (int z = -5; z < 5; z++) {
-								BlockPos p = client.player.getBlockPos().add(x, y, z);
-								if (!bps.contains(p) && client.world.getBlockState(p).getBlock() == Blocks.TURTLE_EGG) {
-									client.interactionManager.attackBlock(p, Direction.DOWN);
-									bps.add(p);
-								}
-							}
-						}
-					}
-				} else b = false;
+			private boolean slotChanged() {
+				MinecraftClient m = MinecraftClient.getInstance();
+				PlayerInventory inv = m.player.getInventory();
+				
+				return (lastSlot != inv.getSlotWithStack(lastItem));
 			}
 			
-		});
+			@Override
+			public void onHudRender(MatrixStack matrix, float delta) {
+				MinecraftClient client = MinecraftClient.getInstance();
+				if (isFlagClash()) {
+					int ps = client.player.getInventory().selectedSlot;
+					if (ps<0) return;
+					ItemStack current = client.player.getInventory().getStack(ps);
+					if (lastWorld == client.world && !client.player.getAbilities().flying && (lastItem != null && (client.currentScreen == null || client.currentScreen instanceof ChatScreen)
+						&& lastItem.getItem() != current.getItem() && lastItem.getItem() != Items.AIR && slotChanged())) {
+								String str = "Swap to ["+client.options.keysHotbar[lastSlot].getDefaultKey().getLocalizedText().getString()+"]";
+								
+								TextRenderer tr = client.textRenderer;
+								Window w = client.getWindow();
+								tr.drawWithShadow(matrix, str, w.getScaledWidth()/2-tr.getWidth(str)/2, w.getScaledHeight()/1.5f, Color.RED.getRGB());
+								client.getItemRenderer().renderInGui(lastItem, w.getScaledWidth()/2, (int)(w.getScaledHeight()/1.6f));
+					} else {
+						lastItem = current;
+						lastSlot = client.player.getInventory().getSlotWithStack(current);
+					}
+					lastWorld = client.world;
+				} else lastItem = null;
+			}
+        });
 		
 		//Quick Soul Shard
 		ClientTickEvents.START_CLIENT_TICK.register(new StartTick() {
