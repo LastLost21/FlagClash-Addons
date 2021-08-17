@@ -63,6 +63,23 @@ public class FCA implements ModInitializer {
 	public BlockPos flag;
 	public Text actionbar;
 	
+	private long moved = System.currentTimeMillis();
+	public double getAFKTime() {
+		return (System.currentTimeMillis()-moved)/1000d;
+	}
+	public boolean nearSpawn() {
+		MinecraftClient m = MinecraftClient.getInstance();
+		for (int x = -4; x < 4; x++) {
+			for (int y = -2; y < 0; y++) {
+				for (int z = -4; z < 4; z++) {
+					Block b = m.world.getBlockState(m.player.getBlockPos().add(x, y, z)).getBlock();
+					if (b == Blocks.BEACON) return true;
+				}
+			}
+		}
+		return false;
+	}
+	
 	@Override
 	public void onInitialize() {
 		fca = this;
@@ -116,14 +133,11 @@ public class FCA implements ModInitializer {
 			}
         });
 		
-//		ChatHud
-		
 		// Anti SpawnPush
 		ClientTickEvents.END_CLIENT_TICK.register(new EndTick() {
 
 			private float yaw, pitch;
 			
-			long moved = System.currentTimeMillis();
 			@Override
 			public void onEndTick(MinecraftClient c) {
 				
@@ -141,23 +155,6 @@ public class FCA implements ModInitializer {
 					yaw = c.player.getYaw();
 					pitch = c.player.getPitch();
 				}
-			}
-
-			private double getAFKTime() {
-				return (System.currentTimeMillis()-moved)/1000d;
-			}
-			
-			private boolean nearSpawn() {
-				MinecraftClient m = MinecraftClient.getInstance();
-				for (int x = -4; x < 4; x++) {
-					for (int y = -2; y < 0; y++) {
-						for (int z = -4; z < 4; z++) {
-							Block b = m.world.getBlockState(m.player.getBlockPos().add(x, y, z)).getBlock();
-							if (b == Blocks.BEACON) return true;
-						}
-					}
-				}
-				return false;
 			}
 			
 		});
