@@ -1,4 +1,4 @@
-
+<img align="left" src="src/main/resources/fca/assets/icon.png">
 [Latest Release](https://github.com/Vaapukkax/FlagClash-Addons/releases/latest)
 
 # FlagClash Addons
