@@ -1,5 +1,5 @@
 [Latest Release](https://github.com/Vaapukkax/FlagClash-Addons/releases/latest)
-<img align="left" src="src/main/resources/fca/assets/icon.png" height="200" width="200">
+<img align="left" src="src/main/resources/fca/assets/icon.png">
 
 # FlagClash Addons
 FlagClash Addons (FCA) is a Fabric Mod for a Minecraft Server called FlagClash which improves experience
