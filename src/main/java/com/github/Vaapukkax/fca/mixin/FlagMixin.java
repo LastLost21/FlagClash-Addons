@@ -36,7 +36,7 @@ public class FlagMixin {
 		Text title = get().getTitle();
 		
 		double tt = getUpgradeTime();
-		if (tt == -1.0) return;
+		if (tt == -1.0 && !isHoldingFlag()) return;
 		ci.cancel();
 		
 		if (!isHoldingFlag()) time = tt;

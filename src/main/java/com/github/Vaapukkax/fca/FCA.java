@@ -8,10 +8,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Random;
 import java.util.stream.Collectors;
-
-import org.lwjgl.glfw.GLFW;
 
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
@@ -19,18 +16,21 @@ import com.mojang.datafixers.util.Pair;
 
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
-import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents.EndTick;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents.StartTick;
-import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
+import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext;
+import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
+import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents.Last;
 import net.minecraft.block.Block;
 import net.minecraft.block.Blocks;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.font.TextRenderer;
 import net.minecraft.client.gui.screen.ChatScreen;
 import net.minecraft.client.option.GameOptions;
-import net.minecraft.client.option.KeyBinding;
-import net.minecraft.client.util.InputUtil;
+import net.minecraft.client.render.RenderLayer;
+import net.minecraft.client.render.VertexConsumer;
+import net.minecraft.client.render.VertexConsumerProvider;
+import net.minecraft.client.render.WorldRenderer;
 import net.minecraft.client.util.Window;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.entity.player.PlayerEntity;
@@ -46,6 +46,8 @@ import net.minecraft.text.LiteralText;
 import net.minecraft.text.MutableText;
 import net.minecraft.text.Text;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Box;
+import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
 
 public class FCA implements ModInitializer {
@@ -53,38 +55,100 @@ public class FCA implements ModInitializer {
 	public static final String VERSION = "v10.1";
 	
 	private static FCA fca;
-	public KeyBinding shard = new KeyBinding(
-			"Quick Shard",
-		    InputUtil.Type.KEYSYM,
-		    GLFW.GLFW_KEY_R,
-		    "key.categories.misc"
-	);
+	public ArrayList<String> friends = new ArrayList<>();
+//	public final KeyBinding shard = new KeyBinding(
+//			"Quick Shard",
+//		    InputUtil.Type.KEYSYM,
+//		    GLFW.GLFW_KEY_R,
+//		    "key.categories.misc"
+//	);
 	
 	public BlockPos flag;
 	public Text actionbar;
 	
-	private long moved = System.currentTimeMillis();
-	public double getAFKTime() {
-		return (System.currentTimeMillis()-moved)/1000d;
-	}
-	public boolean nearSpawn() {
-		MinecraftClient m = MinecraftClient.getInstance();
-		for (int x = -4; x < 4; x++) {
-			for (int y = -2; y < 0; y++) {
-				for (int z = -4; z < 4; z++) {
-					Block b = m.world.getBlockState(m.player.getBlockPos().add(x, y, z)).getBlock();
-					if (b == Blocks.BEACON) return true;
-				}
-			}
-		}
-		return false;
-	}
-	
 	@Override
 	public void onInitialize() {
 		fca = this;
-		KeyBindingHelper.registerKeyBinding(shard);
+//		KeyBindingHelper.registerKeyBinding(shard);
 		
+		// Check is FlagClash
+		ClientTickEvents.START_CLIENT_TICK.register(new StartTick() {
+			@Override public void onStartTick(MinecraftClient c) {
+				if (!enabled && c.world != null) {
+					Iterator<ScoreboardObjective> it = c.world.getScoreboard().getObjectives().iterator();
+					while (it.hasNext())
+						if (it.next().getDisplayName().getString().toLowerCase().contains("flagclash"))
+							enabled = true;
+				}
+			}
+		});
+		
+		// Add Friends
+		HudRenderCallback.EVENT.register(new HudRenderCallback() {
+			private boolean pressed;
+			
+			@Override
+			public void onHudRender(MatrixStack matrix, float delta) {
+				MinecraftClient c = MinecraftClient.getInstance();
+				if (!isFlagClash()) return;
+				
+				if (c.targetedEntity instanceof PlayerEntity) {
+					String e = c.targetedEntity.getName().getString();
+					if (c.mouse.wasMiddleButtonClicked()) {
+						if (!pressed) {
+							if (friends.contains(e)) friends.remove(e);
+							else friends.add(e);
+							pressed = true;
+						}
+					} else pressed = false;
+					if (friends.contains(e)) {
+						String str = "Friended";
+						
+						TextRenderer tr = c.textRenderer;
+						tr.drawWithShadow(matrix, str, c.getWindow().getScaledWidth()/2-tr.getWidth(str)/2, 40, new Color(85, 255, 85).getRGB());
+					}
+				}
+			}		
+		});
+		
+		// Teleportium Sword Visualize spots
+	    WorldRenderEvents.LAST.register(new Last() {
+			public void onLast(WorldRenderContext context) {
+				if (!isFlagClash()) return;
+				
+				MinecraftClient m = MinecraftClient.getInstance();
+				if (getHolding(m.player).getItem() == Items.NETHERITE_SWORD) {
+					
+					MatrixStack matrix = context.matrixStack();
+					Vec3d p = m.gameRenderer.getCamera().getPos();
+
+					matrix.translate(-p.x, -p.y, -p.z);
+					
+					for (int x = -2; x < 3; x++) {
+						for (int z = -2; z < 3; z++) {
+							BlockPos b = m.player.getBlockPos().add(x, 0, z);
+							if (context.world().getBlockState(b).getBlock() == Blocks.AIR && context.world().getBlockState(b.add(0, 1, 0)).getBlock() == Blocks.AIR) {
+								Vec3d v = new Vec3d(b.getX(), b.getY(), b.getZ());
+								drawBox(matrix, new Box(v, v.add(1, 1, 1)));
+							}
+						}
+					}
+	    		}
+			}
+			
+			private void drawBox(MatrixStack matrix, Box box) {
+				MinecraftClient c = MinecraftClient.getInstance();
+				VertexConsumerProvider provider = c.options.fov > 63 && c.options.fov <= 90 ? c.getBufferBuilders().getOutlineVertexConsumers() : c.getBufferBuilders().getEffectVertexConsumers();
+				VertexConsumer vertex = provider.getBuffer(RenderLayer.LINES);
+				
+				box = new Box(box.minX+0.05f, box.minY+0.025f, box.minZ+0.05f, box.maxX-0.025f, box.maxY-0.05f, box.maxZ-0.05f);
+				
+				float a = c.player.isSneaking() ? 0.5f : 1f;
+				
+                WorldRenderer.drawBox(matrix, vertex, box, 0.9f, 0f, 0.8f, a);
+			}
+		});
+	    
 		//MatterShatter Helper
 		HudRenderCallback.EVENT.register(new HudRenderCallback() {
 
@@ -125,80 +189,100 @@ public class FCA implements ModInitializer {
 			
 			private boolean has(Item item) {
 				MinecraftClient m = MinecraftClient.getInstance();
-				Iterator<ItemStack> it = m.player.getInventory().main.iterator();
+				final PlayerInventory inv = m.player.getInventory();
+				Iterator<ItemStack> it = inv.main.iterator();
 				while (it.hasNext()) {
-					if (it.next().getItem() == item) return true;
+					ItemStack n = it.next();
+					if (n.getItem() == item &&
+						PlayerInventory.isValidHotbarIndex(inv.getSlotWithStack(n))) return true;
 				}
 				return false;
 			}
         });
 		
-		// Anti SpawnPush
-		ClientTickEvents.END_CLIENT_TICK.register(new EndTick() {
+		// Auto sneak (Only works at Vibrant Vines)
+		ClientTickEvents.START_CLIENT_TICK.register(new StartTick() {
 
 			private float yaw, pitch;
 			
 			@Override
-			public void onEndTick(MinecraftClient c) {
+			public void onStartTick(MinecraftClient c) {
 				
 				if (isFlagClash()) {
 					GameOptions o = c.options;
 					if (c.player.getYaw() != yaw || c.player.getPitch() != pitch || o.keyLeft.isPressed()||o.keyRight.isPressed()||o.keyForward.isPressed()) {
-						if (getAFKTime() > 15 && nearSpawn()) {
+						if (getAFKTime() >= 10 && nearSpawn()) {
 							c.options.keySneak.setPressed(false);
 						}
 						moved = System.currentTimeMillis();
 					}
 
-					if (getAFKTime() >= 15 && !c.player.isSneaking() && nearSpawn())
+					if (getAFKTime() >= 10 && !c.player.isSneaking() && nearSpawn())
 						c.options.keySneak.setPressed(true);
 					yaw = c.player.getYaw();
 					pitch = c.player.getPitch();
+				}	
+			}
+			
+			private long moved = System.currentTimeMillis();
+			public double getAFKTime() {
+				return (System.currentTimeMillis()-moved)/1000d;
+			}
+			public boolean nearSpawn() {
+				MinecraftClient m = MinecraftClient.getInstance();
+				for (int x = -4; x < 4; x++) {
+					for (int y = -2; y < 0; y++) {
+						for (int z = -4; z < 4; z++) {
+							Block b = m.world.getBlockState(m.player.getBlockPos().add(x, y, z)).getBlock();
+							if (b == Blocks.BEACON) return true;
+						}
+					}
 				}
+				return false;
 			}
 			
 		});
 		
-		//Quick Soul Shard
-		ClientTickEvents.START_CLIENT_TICK.register(new StartTick() {
-			ItemStack last;
-			int i = 0;
-			@Override public void onStartTick(MinecraftClient client) {
-				if (isFlagClash()) {
-					PlayerInventory inv = client.player.getInventory();
-					if (last == null) {
-						if (shard.wasPressed() && shard.isPressed()) {
-							last = getHolding(client.player);
-							
-							boolean b = setSlot(Items.FLINT);
-							if (b) {
-								client.options.keyUse.setPressed(false);
-								rotate();
-								i = 1;
-							} else last = null;
-						}
-					} else if (last != null) {
-						if (i == 2) client.options.keyUse.setPressed(true);
-						else if (i >= 3) {
-							int s = inv.getSlotWithStack(last);
-							if (PlayerInventory.isValidHotbarIndex(s)) {
-								inv.selectedSlot = s;
-							} else setRandom(Items.FLINT);
-							last = null;
-							this.i = 0;
-							rotate();
-							client.options.keyUse.setPressed(false);
-						}
-						i++;
-					}
-				}
-			}
-			private void rotate() {
-				MinecraftClient m = MinecraftClient.getInstance();
-				m.player.setYaw(m.player.getYaw()+180);
-				m.player.setPitch(-m.player.getPitch());
-			}
-	    });
+		//Quick Soul Shard # Removed because YES, prob gonna do something alternative
+//		ClientTickEvents.START_CLIENT_TICK.register(new StartTick() {
+//			ItemStack last;
+//			int i = 0;
+//			@Override public void onStartTick(MinecraftClient client) {
+//				if (isFlagClash()) {
+//					PlayerInventory inv = client.player.getInventory();
+//					if (last == null) {
+//						if (shard.wasPressed() && shard.isPressed()) {
+//							last = getHolding(client.player);
+//							
+//							boolean b = setSlot(Items.FLINT);
+//							if (b) {
+//								client.options.keyUse.setPressed(false);
+//								rotate();
+//								i = 1;
+//							} else last = null;
+//						}
+//					} else if (last != null) {
+//						if (i == 2) client.options.keyUse.setPressed(true);
+//						else if (i >= 3) {
+//							int s = inv.getSlotWithStack(last);
+//							if (PlayerInventory.isValidHotbarIndex(s)) {
+//								inv.selectedSlot = s;
+//							} else setRandom(Items.FLINT);
+//							last = null;
+//							this.i = 0;
+//							rotate();
+//							client.options.keyUse.setPressed(false);
+//						}
+//						i++;
+//					}
+//				}
+//			}
+//			private void rotate() {
+//				MinecraftClient m = MinecraftClient.getInstance();
+//				m.player.setYaw(m.player.getYaw()+180);
+//				m.player.setPitch(-m.player.getPitch());
+//			}
+//	    });
 	}
 
 	private long countdown;
@@ -215,37 +299,37 @@ public class FCA implements ModInitializer {
 		return inv.getStack(inv.selectedSlot);
 	}
 	
-	private void setRandom(Item item) {
-		MinecraftClient m = MinecraftClient.getInstance();
-		PlayerInventory inv = m.player.getInventory();
-		Random r = new Random();
-		
-		ItemStack stack = null;
-		int i = 0;
-		while (stack == null || !PlayerInventory.isValidHotbarIndex(inv.getSlotWithStack(stack)) || stack.getItem() == item) {
-			stack = inv.main.get(r.nextInt(PlayerInventory.getHotbarSize()));
-			i++;
-			if (i>1000000) break;
-		}
-		inv.selectedSlot = stack != null ? inv.getSlotWithStack(stack) : 0;
-	}
-	
-	private boolean setSlot(Item item) {
-		MinecraftClient m = MinecraftClient.getInstance();
-		PlayerInventory inv = m.player.getInventory();
-		
-		for (int i = 0; i < inv.main.size(); i++) {
-			ItemStack stack = inv.main.get(i);
-			if (stack.getItem() == item) {
-				int s = inv.getSlotWithStack(stack);
-				if (PlayerInventory.isValidHotbarIndex(s)) {
-					inv.selectedSlot = s;
-					return true;
-				}
-			}
-		}
-		return false;
-	}
+//	private void setRandom(Item item) {
+//		MinecraftClient m = MinecraftClient.getInstance();
+//		PlayerInventory inv = m.player.getInventory();
+//		Random r = new Random();
+//		
+//		ItemStack stack = null;
+//		int i = 0;
+//		while (stack == null || !PlayerInventory.isValidHotbarIndex(inv.getSlotWithStack(stack)) || stack.getItem() == item) {
+//			stack = inv.main.get(r.nextInt(PlayerInventory.getHotbarSize()));
+//			i++;
+//			if (i>1000000) break;
+//		}
+//		inv.selectedSlot = stack != null ? inv.getSlotWithStack(stack) : 0;
+//	}
+//	
+//	private boolean setSlot(Item item) {
+//		MinecraftClient m = MinecraftClient.getInstance();
+//		PlayerInventory inv = m.player.getInventory();
+//		
+//		for (int i = 0; i < inv.main.size(); i++) {
+//			ItemStack stack = inv.main.get(i);
+//			if (stack.getItem() == item) {
+//				int s = inv.getSlotWithStack(stack);
+//				if (PlayerInventory.isValidHotbarIndex(s)) {
+//					inv.selectedSlot = s;
+//					return true;
+//				}
+//			}
+//		}
+//		return false;
+//	}
 	
 	private static final String[] ve = {
 		"k",
@@ -312,13 +396,12 @@ public class FCA implements ModInitializer {
 		}
 	}
 	public static double getMultiplier() {
-//		System.out.println("RAW: "+getStat("Gps"));
-		String[] m = getStat("Gps").split(" ");
-		if (m.length<2) return 1;
-//		System.out.println("Ye: "+m[0]+", "+m[1]);
-//		System.out.println("Sem final "+m[1].substring(2, m[1].length()-1));
-//		System.out.println("Final: "+Double.parseDouble(m[1].substring(2, m[1].length()-1)));
-		return Double.parseDouble(m[1].substring(2, m[1].length()-1));
+		try {
+			String[] m = getStat("Gps").split(" ");
+			return Double.parseDouble(m[1].substring(2, m[1].length()-1));
+		} catch (Exception e) {
+			return 1;
+		}
 	}
 	
 	@SuppressWarnings({ "rawtypes", "unchecked" })
@@ -363,14 +446,15 @@ public class FCA implements ModInitializer {
 	      return strings;
 	}
 	
+	public boolean enabled;
 	public static boolean isFlagClash() {
 		MinecraftClient m = MinecraftClient.getInstance();
 		if (m.player == null) return false;
-		if (m.getCurrentServerEntry() != null) {
-			String a = m.getCurrentServerEntry().address.toLowerCase();
-			if (a.contains("minehut")) return true;
-		}
-		return true;
+//		if (m.getCurrentServerEntry() != null) {
+//			String a = m.getCurrentServerEntry().address.toLowerCase();
+//			if (a.contains("flagclash")) return true;
+//		}
+		return get().enabled;
 	}
 
 	public static FCA get() {

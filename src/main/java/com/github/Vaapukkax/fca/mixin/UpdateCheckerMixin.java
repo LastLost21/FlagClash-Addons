@@ -29,6 +29,7 @@ public class UpdateCheckerMixin {
 	@Inject(method = "joinWorld", at = @At(value = "TAIL"))
 	public void joinWorld(ClientWorld world, CallbackInfo ci) {
 		checkForUpdates();
+		FCA.get().enabled = false; //too lazy to create another class
 	}
 	@Inject(method = "tick", at = @At(value = "TAIL"))
 	public void tick(CallbackInfo ci) {

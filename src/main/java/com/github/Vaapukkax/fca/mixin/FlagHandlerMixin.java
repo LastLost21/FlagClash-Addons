@@ -25,7 +25,7 @@ public class FlagHandlerMixin {
 	@Inject(at = @At(value = "INVOKE"), method = "onSlotClick")
 	public void onSlotClick(int slotIndex, int button, SlotActionType actionType, PlayerEntity player, CallbackInfo ci) {
 		if (!FCA.isFlagClash()) return;
-		if (slotIndex != -999 && actionType == SlotActionType.PICKUP) {
+		if (slotIndex >= 0 && actionType == SlotActionType.PICKUP) {
 			ItemStack stack = get().getSlot(slotIndex).getStack();
 			Entry<Long, Integer> info = getUpgradeInfo(stack);
 			long current = FCA.toRealValue(FCA.getStat("Gold"));
@@ -33,8 +33,6 @@ public class FlagHandlerMixin {
 			if (current >= info.getKey()) {
 				FCA.get().startCountdown(info.getValue()+0.5);
 			}
-		} else {
-			System.out.println("slotIndex "+slotIndex+", button "+button+", actionType "+actionType+", player "+player.getName());
 		}
 	}
 	

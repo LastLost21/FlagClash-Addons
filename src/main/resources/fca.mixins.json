@@ -7,12 +7,12 @@
   "client": [
     "BlockBreakMixin",
     "BlockPlaceMixin",
-    "ChatMixin",
     "FlagHandlerMixin",
     "FlagMixin",
     "HUDMixin",
     "BladeJumpMixin",
-    "UpdateCheckerMixin"
+    "UpdateCheckerMixin",
+    "FriendMixin"
   ],
   "server": [],
   "injectors": {
